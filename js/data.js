@@ -49,7 +49,7 @@ function addProject(projectData) {
         deadline: projectData.deadline,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
-        tasks: []
+        tasks: projectData.tasks || []
     };
     
     projects.push(newProject);

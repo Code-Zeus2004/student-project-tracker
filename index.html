@@ -107,13 +107,20 @@
                     <div class="form-row">
                         <div class="input-group">
                             <label for="project-description">Description</label>
-                            <textarea 
-                                id="project-description" 
-                                name="description" 
-                                rows="3" 
-                                maxlength="500"
-                                placeholder="Add some details..."
-                                aria-describedby="description-help"></textarea>
+                            <div class="description-container">
+                                <textarea 
+                                    id="project-description" 
+                                    name="description" 
+                                    rows="3" 
+                                    maxlength="500"
+                                    placeholder="Add some details..."
+                                    aria-describedby="description-help"></textarea>
+                                <button type="button" id="generate-description-btn" class="btn-generate-ai" title="Generate description with AI">
+                                    <span class="ai-icon">✨</span>
+                                    <span class="ai-text">Generate with AI</span>
+                                </button>
+                            </div>
+                            <small id="description-help">Describe your project or use AI to generate one based on title and subject</small>
                         </div>
                     </div>
 
@@ -165,6 +172,22 @@
                                 
                                 <input type="radio" id="status-completed" name="status" value="completed">
                                 <label for="status-completed" class="status-btn">Completed</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Task Management Section -->
+                    <div class="form-row">
+                        <div class="input-group">
+                            <label>Tasks (Optional)</label>
+                            <div class="tasks-section">
+                                <div id="task-list" class="task-list">
+                                    <!-- Tasks will be added here -->
+                                </div>
+                                <div class="add-task-row">
+                                    <input type="text" id="new-task-input" placeholder="Add a task..." maxlength="100">
+                                    <button type="button" id="add-task-btn" class="btn-add-task">+</button>
+                                </div>
                             </div>
                         </div>
                     </div>

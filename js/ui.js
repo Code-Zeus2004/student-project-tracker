@@ -56,6 +56,8 @@ function createProjectCard(project) {
             
             ${project.description ? `<p class="project-description">${escapeHtml(project.description)}</p>` : ''}
             
+            ${project.tasks && project.tasks.length > 0 ? createTasksDisplay(project.tasks) : ''}
+            
             <div class="project-meta">
                 <div class="meta-item">
                     <span class="meta-label">📅 Deadline</span>
@@ -201,4 +203,65 @@ function announceToScreenReader(message) {
     
     document.body.appendChild(announcement);
     setTimeout(() => announcement.remove(), 1000);
+}
+
+/**
+ * Create tasks display for project card
+ */
+function createTasksDisplay(tasks) {
+    if (!tasks || tasks.length === 0) return '';
+    
+    const completedTasks = tasks.filter(task => task.completed).length;
+    const totalTasks = tasks.length;
+    const progressPercent = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+    
+    const taskItems = tasks.slice(0, 3).map(task => `
+        <div class="task-display-item ${task.completed ? 'completed' : ''}">
+            <span class="task-checkbox-display">${task.completed ? '✓' : '○'}</span>
+            <span class="task-text">${escapeHtml(task.text)}</span>
+        </div>
+    `).join('');
+    
+    const moreTasksText = tasks.length > 3 ? `<div class="more-tasks">+${tasks.length - 3} more tasks</div>` : '';
+    
+    return `
+        <div class="project-tasks">
+            <div class="tasks-header">
+                <span class="tasks-label">📋 Tasks</span>
+                <span class="tasks-progress">${completedTasks}/${totalTasks}</span>
+            </div>
+            <div class="tasks-progress-bar">
+                <div class="tasks-progress-fill" style="width: ${progressPercent}%"></div>
+            </div>
+            <div class="tasks-list">
+                ${taskItems}
+                ${moreTasksText}
+            </div>
+        </div>
+    `;
+}
+
+/**
+ * Handle task toggle in project card
+ */
+function handleTaskToggle(event, projectId, taskId) {
+    event.stopPropagation();
+    
+    const project = getProject(projectId);
+    if (!project) return;
+    
+    const taskIndex = project.tasks.findIndex(task => task.id === taskId);
+    if (taskIndex === -1) return;
+    
+    project.tasks[taskIndex].completed = !project.tasks[taskIndex].completed;
+    
+    updateProject(projectId, { tasks: project.tasks });
+    
+    const filters = getCurrentFilters();
+    renderProjects(filters);
+    updateStats();
+    
+    const taskText = project.tasks[taskIndex].text;
+    const status = project.tasks[taskIndex].completed ? 'completed' : 'uncompleted';
+    announceToScreenReader(`Task "${taskText}" marked as ${status}`);
 }
