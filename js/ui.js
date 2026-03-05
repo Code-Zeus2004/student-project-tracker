@@ -38,7 +38,7 @@ function updateProgressRing(stats) {
 
 /**
  * Create project card HTML
- */
+ 
 function createProjectCard(project) {
     const statusText = getStatusText(project);
     const statusClass = getStatusClass(project);
@@ -80,6 +80,56 @@ function createProjectCard(project) {
             </div>
         </article>
     `;
+}*/
+
+function createProjectCard(project) {
+    const title = project.title || "Untitled";
+    const subject = project.subject || "";
+    const description = project.description || "";
+    const status = project.status || "not-started";
+    const priority = project.priority || "low";
+    const deadline = project.deadline || "";
+
+    const statusText = getStatusText({ status });
+    const statusClass = getStatusClass({ status });
+    const priorityClass = getPriorityClass(priority);
+
+    const priorityCapitalized =
+        priority.charAt(0).toUpperCase() + priority.slice(1);
+
+    return `
+        <article class="project-card" data-project-id="${project._id}" role="listitem">
+            <div class="project-header">
+                <h3 class="project-title">${escapeHtml(title)}</h3>
+                <span class="priority-badge ${priorityClass}">${priorityCapitalized}</span>
+            </div>
+            
+            ${subject ? `<p class="project-subject">📚 ${escapeHtml(subject)}</p>` : ''}
+            
+            ${description ? `<p class="project-description">${escapeHtml(description)}</p>` : ''}
+            
+            <div class="project-meta">
+                <div class="meta-item">
+                    <span class="meta-label">📅 Deadline</span>
+                    <time class="meta-value">${formatDate(deadline)}</time>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">Status</span>
+                    <span class="status-badge ${statusClass}">${statusText}</span>
+                </div>
+            </div>
+            
+            <div class="project-actions">
+                <select class="status-select" data-project-id="${project._id}">
+                    <option value="not-started" ${status === 'not-started' ? 'selected' : ''}>Not Started</option>
+                    <option value="in-progress" ${status === 'in-progress' ? 'selected' : ''}>In Progress</option>
+                    <option value="completed" ${status === 'completed' ? 'selected' : ''}>Completed</option>
+                </select>
+                <button class="btn-edit" data-project-id="${project._id}">✏️</button>
+                <button class="btn-delete" data-project-id="${project._id}">🗑️</button>
+            </div>
+        </article>
+    `;
 }
 
 /**
@@ -87,6 +137,11 @@ function createProjectCard(project) {
  */
 function renderProjects(filters = {}) {
     const container = document.getElementById('projects-container');
+    
+    if (isLoading) {
+        return; // Don't render while loading
+    }
+    
     const projects = getFilteredProjects(filters);
     
     if (projects.length === 0) {
@@ -133,26 +188,37 @@ function handleEditProject(event) {
 /**
  * Handle status change
  */
-function handleStatusChange(event) {
+async function handleStatusChange(event) {
     const projectId = event.target.dataset.projectId;
     const newStatus = event.target.value;
     const project = getProject(projectId);
     
     if (!project) return;
     
-    updateProject(projectId, { status: newStatus });
+    // Disable select while updating
+    event.target.disabled = true;
     
-    announceToScreenReader(`Project "${project.title}" status changed to ${newStatus.replace('-', ' ')}`);
-    
-    const filters = getCurrentFilters();
-    renderProjects(filters);
-    updateStats();
+    try {
+        await updateProject(projectId, { status: newStatus });
+        
+        announceToScreenReader(`Project "${project.title}" status changed to ${newStatus.replace('-', ' ')}`);
+        
+        const filters = getCurrentFilters();
+        renderProjects(filters);
+        updateStats();
+    } catch (error) {
+        showError('Failed to update project status');
+        // Revert select value
+        event.target.value = project.status;
+    } finally {
+        event.target.disabled = false;
+    }
 }
 
 /**
  * Handle project deletion
  */
-function handleDeleteProject(event) {
+async function handleDeleteProject(event) {
     const projectId = event.target.dataset.projectId;
     const project = getProject(projectId);
     
@@ -161,13 +227,23 @@ function handleDeleteProject(event) {
     const confirmed = confirm(`Delete "${project.title}"?\n\nThis action cannot be undone.`);
     
     if (confirmed) {
-        deleteProject(projectId);
+        // Disable button while deleting
+        event.target.disabled = true;
+        event.target.textContent = '⏳';
         
-        const filters = getCurrentFilters();
-        renderProjects(filters);
-        updateStats();
-        
-        showSuccess('🗑️ Project deleted');
+        try {
+            await deleteProject(projectId);
+            
+            const filters = getCurrentFilters();
+            renderProjects(filters);
+            updateStats();
+            
+            showSuccess('🗑️ Project deleted');
+        } catch (error) {
+            showError('Failed to delete project');
+            event.target.disabled = false;
+            event.target.textContent = '🗑️';
+        }
     }
 }
 
@@ -244,7 +320,7 @@ function createTasksDisplay(tasks) {
 /**
  * Handle task toggle in project card
  */
-function handleTaskToggle(event, projectId, taskId) {
+async function handleTaskToggle(event, projectId, taskId) {
     event.stopPropagation();
     
     const project = getProject(projectId);
@@ -255,13 +331,33 @@ function handleTaskToggle(event, projectId, taskId) {
     
     project.tasks[taskIndex].completed = !project.tasks[taskIndex].completed;
     
-    updateProject(projectId, { tasks: project.tasks });
-    
-    const filters = getCurrentFilters();
-    renderProjects(filters);
-    updateStats();
-    
-    const taskText = project.tasks[taskIndex].text;
-    const status = project.tasks[taskIndex].completed ? 'completed' : 'uncompleted';
-    announceToScreenReader(`Task "${taskText}" marked as ${status}`);
+    try {
+        await updateProject(projectId, { tasks: project.tasks });
+        
+        const filters = getCurrentFilters();
+        renderProjects(filters);
+        updateStats();
+        
+        const taskText = project.tasks[taskIndex].text;
+        const status = project.tasks[taskIndex].completed ? 'completed' : 'uncompleted';
+        announceToScreenReader(`Task "${taskText}" marked as ${status}`);
+    } catch (error) {
+        showError('Failed to update task');
+        // Revert the change
+        project.tasks[taskIndex].completed = !project.tasks[taskIndex].completed;
+    }
+}
+
+function getFilteredProjects(filters = {}) {
+    let filtered = [...allProjects];
+
+    if (filters.status && filters.status !== 'all') {
+        filtered = filtered.filter(p => p.status === filters.status);
+    }
+
+    if (filters.priority && filters.priority !== 'all') {
+        filtered = filtered.filter(p => p.priority === filters.priority);
+    }
+
+    return filtered;
 }

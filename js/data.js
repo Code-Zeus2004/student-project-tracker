@@ -1,61 +1,95 @@
 // ===========================
-// Data Management & LocalStorage
+// Data Management & API Integration
 // ===========================
 
-const STORAGE_KEY = 'studentProjectTracker_projects';
+// API Configuration
+const API_BASE_URL = 'http://localhost:3000/api'; // Update with your backend URL
+
+// Global state
+let projectsState = [];
 
 /**
- * Load projects from localStorage
- * @returns {Array} Array of project objects
+ * API Helper - Make HTTP requests
  */
-function loadProjects() {
+async function apiRequest(endpoint, options = {}) {
     try {
-        const data = localStorage.getItem(STORAGE_KEY);
-        return data ? JSON.parse(data) : [];
+        const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+            headers: {
+                'Content-Type': 'application/json',
+                ...options.headers
+            },
+            ...options
+        });
+        
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.message || 'API request failed');
+        }
+        
+        return await response.json();
+    } catch (error) {
+        console.error('API Error:', error);
+        throw error;
+    }
+}
+
+/**
+ * Load all projects from API
+ * @returns {Promise<Array>} Array of project objects
+ */
+async function loadProjects() {
+    try {
+        const data = await apiRequest('/projects');
+        projectsState = data.projects || data || [];
+        return projectsState;
     } catch (error) {
         console.error('Error loading projects:', error);
+        showError('Failed to load projects. Please check your connection.');
         return [];
     }
 }
 
 /**
- * Save projects to localStorage
- * @param {Array} projects - Array of project objects
+ * Get projects from state (synchronous)
+ * @returns {Array} Array of project objects
  */
-function saveProjects(projects) {
-    try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(projects));
-    } catch (error) {
-        console.error('Error saving projects:', error);
-        alert('Failed to save projects. Storage might be full.');
-    }
+function getProjectsFromState() {
+    return projectsState;
 }
 
 /**
  * Add a new project
  * @param {Object} projectData - Project data from form
- * @returns {Object} Created project
+ * @returns {Promise<Object>} Created project
  */
-function addProject(projectData) {
-    const projects = loadProjects();
-    
-    const newProject = {
-        id: generateId(),
-        title: projectData.title,
-        description: projectData.description || '',
-        subject: projectData.subject || '',
-        priority: projectData.priority,
-        status: projectData.status,
-        deadline: projectData.deadline,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        tasks: projectData.tasks || []
-    };
-    
-    projects.push(newProject);
-    saveProjects(projects);
-    
-    return newProject;
+async function addProject(projectData) {
+    try {
+        const newProject = {
+            title: projectData.title,
+            description: projectData.description || '',
+            subject: projectData.subject || '',
+            priority: projectData.priority,
+            status: projectData.status,
+            deadline: projectData.deadline,
+            tasks: projectData.tasks || [],
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+        };
+        
+        const response = await apiRequest('/projects', {
+            method: 'POST',
+            body: JSON.stringify(newProject)
+        });
+        
+        // Add to state
+        const createdProject = response.project || response;
+        projectsState.push(createdProject);
+        
+        return createdProject;
+    } catch (error) {
+        console.error('Error adding project:', error);
+        throw error;
+    }
 }
 
 /**
@@ -64,47 +98,65 @@ function addProject(projectData) {
  * @returns {Object|null} Project object or null
  */
 function getProject(projectId) {
-    const projects = loadProjects();
-    return projects.find(p => p.id === projectId) || null;
+    return projectsState.find(p => p._id === projectId || p.id === projectId) || null;
 }
 
 /**
  * Update a project
  * @param {string} projectId - Project ID
  * @param {Object} updates - Fields to update
- * @returns {Object|null} Updated project or null
+ * @returns {Promise<Object|null>} Updated project or null
  */
-function updateProject(projectId, updates) {
-    const projects = loadProjects();
-    const index = projects.findIndex(p => p.id === projectId);
-    
-    if (index === -1) return null;
-    
-    projects[index] = {
-        ...projects[index],
-        ...updates,
-        updatedAt: new Date().toISOString()
-    };
-    
-    saveProjects(projects);
-    return projects[index];
+async function updateProject(projectId, updates) {
+    try {
+        const updateData = {
+            ...updates,
+            updatedAt: new Date().toISOString()
+        };
+        
+        const response = await apiRequest(`/projects/${projectId}`, {
+            method: 'PUT',
+            body: JSON.stringify(updateData)
+        });
+        
+        // Update state
+        const updatedProject = response.project || response;
+        const index = projectsState.findIndex(p => 
+            (p._id && p._id === projectId) || (p.id && p.id === projectId)
+        );
+        
+        if (index !== -1) {
+            projectsState[index] = updatedProject;
+        }
+        
+        return updatedProject;
+    } catch (error) {
+        console.error('Error updating project:', error);
+        throw error;
+    }
 }
 
 /**
  * Delete a project
  * @param {string} projectId - Project ID
- * @returns {boolean} True if deleted successfully
+ * @returns {Promise<boolean>} True if deleted successfully
  */
-function deleteProject(projectId) {
-    const projects = loadProjects();
-    const filteredProjects = projects.filter(p => p.id !== projectId);
-    
-    if (filteredProjects.length === projects.length) {
-        return false; // Project not found
+async function deleteProject(projectId) {
+    try {
+        await apiRequest(`/projects/${projectId}`, {
+            method: 'DELETE'
+        });
+        
+        // Remove from state
+        projectsState = projectsState.filter(p => 
+            (p._id && p._id !== projectId) && (p.id && p.id !== projectId)
+        );
+        
+        return true;
+    } catch (error) {
+        console.error('Error deleting project:', error);
+        throw error;
     }
-    
-    saveProjects(filteredProjects);
-    return true;
 }
 
 /**
@@ -113,7 +165,7 @@ function deleteProject(projectId) {
  * @returns {Array} Filtered projects
  */
 function getFilteredProjects(filters = {}) {
-    let projects = loadProjects();
+    let projects = [...projectsState];
     
     // Apply status filter
     if (filters.status && filters.status !== 'all') {
@@ -156,7 +208,7 @@ function getFilteredProjects(filters = {}) {
  * @returns {Object} Statistics object
  */
 function getProjectStats() {
-    const projects = loadProjects();
+    const projects = projectsState;
     
     return {
         total: projects.length,
@@ -165,4 +217,17 @@ function getProjectStats() {
         completed: projects.filter(p => p.status === 'completed').length,
         overdue: projects.filter(p => isOverdue(p.deadline, p.status)).length
     };
+}
+
+/**
+ * Sync projects with backend (refresh from API)
+ * @returns {Promise<Array>} Updated projects array
+ */
+async function syncProjects() {
+    try {
+        return await loadProjects();
+    } catch (error) {
+        console.error('Error syncing projects:', error);
+        return projectsState;
+    }
 }
