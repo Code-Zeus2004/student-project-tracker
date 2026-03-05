@@ -2,8 +2,8 @@
 // Data Management & API Integration
 // ===========================
 
-// API Configuration
-const API_BASE_URL = 'http://localhost:3000/api'; // Update with your backend URL
+// API Configuration - UPDATE THIS TO MATCH YOUR BACKEND
+const API_BASE_URL = 'http://localhost:5000/api'; // Backend runs on port 5000
 
 // Global state
 let projectsState = [];
@@ -13,7 +13,10 @@ let projectsState = [];
  */
 async function apiRequest(endpoint, options = {}) {
     try {
-        const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+        const url = `${API_BASE_URL}${endpoint}`;
+        console.log(`API Request: ${options.method || 'GET'} ${url}`);
+        
+        const response = await fetch(url, {
             headers: {
                 'Content-Type': 'application/json',
                 ...options.headers
@@ -21,14 +24,26 @@ async function apiRequest(endpoint, options = {}) {
             ...options
         });
         
+        // Check if response is JSON
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+            throw new Error(`Backend returned HTML instead of JSON. Is your backend running at ${API_BASE_URL}?`);
+        }
+        
         if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.message || 'API request failed');
+            const error = await response.json().catch(() => ({ message: 'API request failed' }));
+            throw new Error(error.message || `HTTP ${response.status}: ${response.statusText}`);
         }
         
         return await response.json();
     } catch (error) {
         console.error('API Error:', error);
+        
+        // Provide helpful error messages
+        if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+            throw new Error('Cannot connect to backend. Make sure your server is running.');
+        }
+        
         throw error;
     }
 }
@@ -40,11 +55,33 @@ async function apiRequest(endpoint, options = {}) {
 async function loadProjects() {
     try {
         const data = await apiRequest('/projects');
-        projectsState = data.projects || data || [];
+        
+        // Handle different response formats
+        if (Array.isArray(data)) {
+            projectsState = data;
+        } else if (data.projects && Array.isArray(data.projects)) {
+            projectsState = data.projects;
+        } else if (data.data && Array.isArray(data.data)) {
+            projectsState = data.data;
+        } else {
+            console.warn('Unexpected API response format:', data);
+            projectsState = [];
+        }
+        
+        console.log(`Loaded ${projectsState.length} projects from API`);
         return projectsState;
     } catch (error) {
         console.error('Error loading projects:', error);
-        showError('Failed to load projects. Please check your connection.');
+        
+        // Show user-friendly error
+        const errorMsg = error.message.includes('backend') || error.message.includes('connect')
+            ? 'Cannot connect to backend server. Please start your Node.js server.'
+            : 'Failed to load projects. Please try again.';
+        
+        showError(errorMsg);
+        
+        // Return empty array to allow app to continue
+        projectsState = [];
         return [];
     }
 }
@@ -76,13 +113,12 @@ async function addProject(projectData) {
             updatedAt: new Date().toISOString()
         };
         
-        const response = await apiRequest('/projects', {
+        const createdProject = await apiRequest('/projects', {
             method: 'POST',
             body: JSON.stringify(newProject)
         });
         
         // Add to state
-        const createdProject = response.project || response;
         projectsState.push(createdProject);
         
         return createdProject;
@@ -114,13 +150,12 @@ async function updateProject(projectId, updates) {
             updatedAt: new Date().toISOString()
         };
         
-        const response = await apiRequest(`/projects/${projectId}`, {
+        const updatedProject = await apiRequest(`/projects/${projectId}`, {
             method: 'PUT',
             body: JSON.stringify(updateData)
         });
         
         // Update state
-        const updatedProject = response.project || response;
         const index = projectsState.findIndex(p => 
             (p._id && p._id === projectId) || (p.id && p.id === projectId)
         );
@@ -231,3 +266,43 @@ async function syncProjects() {
         return projectsState;
     }
 }
+
+/**
+ * Check if backend is available
+ * @returns {Promise<boolean>} True if backend is reachable
+ */
+async function checkBackendConnection() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/projects`, {
+            method: 'HEAD',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        return response.ok || response.status === 404; // 404 means server is running but endpoint might be different
+    } catch (error) {
+        return false;
+    }
+}
+
+/**
+ * Get backend status for debugging
+ * @returns {Promise<Object>} Status information
+ */
+async function getBackendStatus() {
+    const isConnected = await checkBackendConnection();
+    return {
+        url: API_BASE_URL,
+        connected: isConnected,
+        projectCount: projectsState.length,
+        message: isConnected 
+            ? 'Backend is connected' 
+            : `Backend not reachable at ${API_BASE_URL}. Please start your server.`
+    };
+}
+
+// Export for debugging in console
+window.debugAPI = {
+    checkConnection: checkBackendConnection,
+    getStatus: getBackendStatus,
+    getProjects: () => projectsState,
+    apiUrl: API_BASE_URL
+};

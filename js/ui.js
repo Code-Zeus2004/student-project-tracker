@@ -348,16 +348,4 @@ async function handleTaskToggle(event, projectId, taskId) {
     }
 }
 
-function getFilteredProjects(filters = {}) {
-    let filtered = [...allProjects];
-
-    if (filters.status && filters.status !== 'all') {
-        filtered = filtered.filter(p => p.status === filters.status);
-    }
-
-    if (filters.priority && filters.priority !== 'all') {
-        filtered = filtered.filter(p => p.priority === filters.priority);
-    }
-
-    return filtered;
-}
+// getFilteredProjects is now imported from data.js - no need to redefine here
