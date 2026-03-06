@@ -3,11 +3,10 @@
 // ===========================
 
 // API Configuration
-// For production: Update this to your Render backend URL
-// Example: 'https://your-app-name.onrender.com/api'
+// Production backend URL (Render)
 const API_BASE_URL = window.location.hostname === 'localhost' 
     ? 'http://localhost:5000/api'
-    : 'https://your-render-backend-url.onrender.com/api'; // UPDATE THIS FOR PRODUCTION
+    : 'https://student-project-tracker-4hnz.onrender.com/api';
 
 // localStorage keys
 const STORAGE_KEYS = {
