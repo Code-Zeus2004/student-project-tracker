@@ -44,10 +44,7 @@ app.use("/api/projects", projectRoutes);
 // MongoDB Connection with better error handling
 const connectDB = async () => {
     try {
-        await mongoose.connect(process.env.MONGO_URI, {
-            useNewUrlParser: true,
-            useUnifiedTopology: true
-        });
+        await mongoose.connect(process.env.MONGO_URI);
         console.log("✅ MongoDB Atlas Connected");
     } catch (err) {
         console.error("❌ MongoDB Connection Error:", err.message);
