@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Generate Favicon - Project Tracker</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .container {
+            background: rgba(255,255,255,0.1);
+            backdrop-filter: blur(10px);
+            padding: 30px;
+            border-radius: 20px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+        }
+        h1 { margin-top: 0; }
+        canvas {
+            border: 3px solid white;
+            border-radius: 10px;
+            background: white;
+            margin: 20px 0;
+        }
+        button {
+            background: white;
+            color: #667eea;
+            border: none;
+            padding: 15px 30px;
+            font-size: 16px;
+            font-weight: bold;
+            border-radius: 10px;
+            cursor: pointer;
+            margin: 10px 5px;
+            transition: transform 0.2s;
+        }
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        }
+        .preview {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            margin: 20px 0;
+        }
+        .info {
+            background: rgba(255,255,255,0.2);
+            padding: 15px;
+            border-radius: 10px;
+            margin: 20px 0;
+        }
+        .success {
+            background: rgba(76, 175, 80, 0.3);
+            padding: 15px;
+            border-radius: 10px;
+            margin: 20px 0;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📚 Project Tracker Favicon Generator</h1>
+        
+        <div class="info">
+            <strong>Instructions:</strong>
+            <ol>
+                <li>Click the button below to generate your favicon</li>
+                <li>The file will download automatically as "favicon.ico"</li>
+                <li>Move the downloaded file to the <code>assets</code> folder</li>
+                <li>Refresh your Project Tracker page to see the new favicon!</li>
+            </ol>
+        </div>
+
+        <div class="preview">
+            <div>
+                <h3>Preview (32x32):</h3>
+                <canvas id="canvas32" width="32" height="32"></canvas>
+            </div>
+            <div>
+                <h3>Preview (16x16):</h3>
+                <canvas id="canvas16" width="16" height="16"></canvas>
+            </div>
+        </div>
+
+        <button onclick="downloadFavicon()">⬇️ Download favicon.ico</button>
+        <button onclick="downloadPNG()">⬇️ Download favicon.png</button>
+        
+        <div class="success" id="success">
+            ✅ Favicon downloaded! Now move it to the assets folder.
+        </div>
+    </div>
+
+    <script>
+        function drawFavicon(canvas) {
+            const ctx = canvas.getContext('2d');
+            const size = canvas.width;
+            const scale = size / 32;
+            
+            // Clear canvas
+            ctx.clearRect(0, 0, size, size);
+            
+            // Create gradient background
+            const gradient = ctx.createLinearGradient(0, 0, size, size);
+            gradient.addColorStop(0, '#667eea');
+            gradient.addColorStop(1, '#764ba2');
+            
+            // Draw circular background
+            ctx.fillStyle = gradient;
+            ctx.beginPath();
+            ctx.arc(size/2, size/2, size/2 - scale, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Draw checkmark
+            ctx.strokeStyle = 'white';
+            ctx.lineWidth = 3 * scale;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            
+            ctx.beginPath();
+            ctx.moveTo(8 * scale, 16 * scale);
+            ctx.lineTo(13 * scale, 21 * scale);
+            ctx.lineTo(24 * scale, 10 * scale);
+            ctx.stroke();
+            
+            // Add small document lines for detail (only on 32x32)
+            if (size === 32) {
+                ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+                ctx.lineWidth = 2;
+                
+                ctx.beginPath();
+                ctx.moveTo(8, 8);
+                ctx.lineTo(16, 8);
+                ctx.stroke();
+                
+                ctx.beginPath();
+                ctx.moveTo(8, 12);
+                ctx.lineTo(14, 12);
+                ctx.stroke();
+            }
+        }
+        
+        // Draw both previews
+        drawFavicon(document.getElementById('canvas32'));
+        drawFavicon(document.getElementById('canvas16'));
+        
+        function downloadFavicon() {
+            const canvas = document.getElementById('canvas32');
+            canvas.toBlob(function(blob) {
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'favicon.ico';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                
+                document.getElementById('success').style.display = 'block';
+                setTimeout(() => {
+                    document.getElementById('success').style.display = 'none';
+                }, 5000);
+            });
+        }
+        
+        function downloadPNG() {
+            const canvas = document.getElementById('canvas32');
+            canvas.toBlob(function(blob) {
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'favicon.png';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                
+                document.getElementById('success').style.display = 'block';
+                setTimeout(() => {
+                    document.getElementById('success').style.display = 'none';
+                }, 5000);
+            });
+        }
+    </script>
+</body>
+</html>
