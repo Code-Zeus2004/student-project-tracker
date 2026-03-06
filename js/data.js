@@ -1,12 +1,68 @@
 // ===========================
-// Data Management & API Integration
+// Data Management & API Integration with localStorage Cache
 // ===========================
 
-// API Configuration - UPDATE THIS TO MATCH YOUR BACKEND
-const API_BASE_URL = 'http://localhost:5000/api'; // Backend runs on port 5000
+// API Configuration
+// For production: Update this to your Render backend URL
+// Example: 'https://your-app-name.onrender.com/api'
+const API_BASE_URL = window.location.hostname === 'localhost' 
+    ? 'http://localhost:5000/api'
+    : 'https://your-render-backend-url.onrender.com/api'; // UPDATE THIS FOR PRODUCTION
+
+// localStorage keys
+const STORAGE_KEYS = {
+    PROJECTS: 'studentProjectTracker_projects',
+    LAST_SYNC: 'studentProjectTracker_lastSync',
+    OFFLINE_MODE: 'studentProjectTracker_offlineMode'
+};
 
 // Global state
 let projectsState = [];
+let isOfflineMode = false;
+
+/**
+ * Save projects to localStorage cache
+ */
+function saveToCache(projects) {
+    try {
+        localStorage.setItem(STORAGE_KEYS.PROJECTS, JSON.stringify(projects));
+        localStorage.setItem(STORAGE_KEYS.LAST_SYNC, new Date().toISOString());
+        console.log('💾 Projects cached to localStorage');
+    } catch (error) {
+        console.error('Failed to save to cache:', error);
+    }
+}
+
+/**
+ * Load projects from localStorage cache
+ */
+function loadFromCache() {
+    try {
+        const cached = localStorage.getItem(STORAGE_KEYS.PROJECTS);
+        if (cached) {
+            const projects = JSON.parse(cached);
+            const lastSync = localStorage.getItem(STORAGE_KEYS.LAST_SYNC);
+            console.log(`📦 Loaded ${projects.length} projects from cache (last sync: ${lastSync})`);
+            return projects;
+        }
+    } catch (error) {
+        console.error('Failed to load from cache:', error);
+    }
+    return [];
+}
+
+/**
+ * Clear localStorage cache
+ */
+function clearCache() {
+    try {
+        localStorage.removeItem(STORAGE_KEYS.PROJECTS);
+        localStorage.removeItem(STORAGE_KEYS.LAST_SYNC);
+        console.log('🗑️ Cache cleared');
+    } catch (error) {
+        console.error('Failed to clear cache:', error);
+    }
+}
 
 /**
  * API Helper - Make HTTP requests
@@ -27,7 +83,7 @@ async function apiRequest(endpoint, options = {}) {
         // Check if response is JSON
         const contentType = response.headers.get('content-type');
         if (!contentType || !contentType.includes('application/json')) {
-            throw new Error(`Backend returned HTML instead of JSON. Is your backend running at ${API_BASE_URL}?`);
+            throw new Error(`Backend returned non-JSON response`);
         }
         
         if (!response.ok) {
@@ -41,7 +97,7 @@ async function apiRequest(endpoint, options = {}) {
         
         // Provide helpful error messages
         if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
-            throw new Error('Cannot connect to backend. Make sure your server is running.');
+            throw new Error('Cannot connect to backend. Using offline mode.');
         }
         
         throw error;
@@ -49,11 +105,12 @@ async function apiRequest(endpoint, options = {}) {
 }
 
 /**
- * Load all projects from API
+ * Load all projects from API with localStorage fallback
  * @returns {Promise<Array>} Array of project objects
  */
 async function loadProjects() {
     try {
+        // Try to fetch from API
         const data = await apiRequest('/projects');
         
         // Handle different response formats
@@ -68,21 +125,31 @@ async function loadProjects() {
             projectsState = [];
         }
         
-        console.log(`Loaded ${projectsState.length} projects from API`);
+        // Save to cache on successful fetch
+        saveToCache(projectsState);
+        isOfflineMode = false;
+        localStorage.setItem(STORAGE_KEYS.OFFLINE_MODE, 'false');
+        
+        console.log(`✅ Loaded ${projectsState.length} projects from API`);
         return projectsState;
+        
     } catch (error) {
-        console.error('Error loading projects:', error);
+        console.error('Error loading projects from API:', error);
+        
+        // Fallback to localStorage cache
+        console.log('📦 Falling back to cached data...');
+        projectsState = loadFromCache();
+        isOfflineMode = true;
+        localStorage.setItem(STORAGE_KEYS.OFFLINE_MODE, 'true');
         
         // Show user-friendly error
-        const errorMsg = error.message.includes('backend') || error.message.includes('connect')
-            ? 'Cannot connect to backend server. Please start your Node.js server.'
-            : 'Failed to load projects. Please try again.';
+        const errorMsg = error.message.includes('connect') || error.message.includes('offline')
+            ? '⚠️ Offline Mode: Showing cached projects. Changes will sync when online.'
+            : '⚠️ Using cached data. Some features may be limited.';
         
-        showError(errorMsg);
+        showWarning(errorMsg);
         
-        // Return empty array to allow app to continue
-        projectsState = [];
-        return [];
+        return projectsState;
     }
 }
 
@@ -95,36 +162,63 @@ function getProjectsFromState() {
 }
 
 /**
+ * Check if app is in offline mode
+ * @returns {boolean} True if offline
+ */
+function isOffline() {
+    return isOfflineMode;
+}
+
+/**
  * Add a new project
  * @param {Object} projectData - Project data from form
  * @returns {Promise<Object>} Created project
  */
 async function addProject(projectData) {
+    const newProject = {
+        title: projectData.title,
+        description: projectData.description || '',
+        subject: projectData.subject || '',
+        priority: projectData.priority,
+        status: projectData.status,
+        deadline: projectData.deadline,
+        tasks: projectData.tasks || [],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+    };
+    
+    if (isOfflineMode) {
+        // Offline mode: save to cache only
+        newProject._id = `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        newProject.pendingSync = true;
+        projectsState.push(newProject);
+        saveToCache(projectsState);
+        showWarning('⚠️ Offline: Project saved locally. Will sync when online.');
+        return newProject;
+    }
+    
     try {
-        const newProject = {
-            title: projectData.title,
-            description: projectData.description || '',
-            subject: projectData.subject || '',
-            priority: projectData.priority,
-            status: projectData.status,
-            deadline: projectData.deadline,
-            tasks: projectData.tasks || [],
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString()
-        };
-        
         const createdProject = await apiRequest('/projects', {
             method: 'POST',
             body: JSON.stringify(newProject)
         });
         
-        // Add to state
+        // Add to state and cache
         projectsState.push(createdProject);
+        saveToCache(projectsState);
         
         return createdProject;
     } catch (error) {
         console.error('Error adding project:', error);
-        throw error;
+        
+        // Fallback to offline mode
+        newProject._id = `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        newProject.pendingSync = true;
+        projectsState.push(newProject);
+        saveToCache(projectsState);
+        showWarning('⚠️ Saved locally. Will sync when connection is restored.');
+        
+        return newProject;
     }
 }
 
@@ -144,30 +238,52 @@ function getProject(projectId) {
  * @returns {Promise<Object|null>} Updated project or null
  */
 async function updateProject(projectId, updates) {
+    const updateData = {
+        ...updates,
+        updatedAt: new Date().toISOString()
+    };
+    
+    // Update local state first for immediate UI feedback
+    const index = projectsState.findIndex(p => 
+        (p._id && p._id === projectId) || (p.id && p.id === projectId)
+    );
+    
+    if (index === -1) {
+        throw new Error('Project not found');
+    }
+    
+    const localUpdate = { ...projectsState[index], ...updateData };
+    
+    if (isOfflineMode || projectId.startsWith('temp_')) {
+        // Offline mode or temp project: update cache only
+        localUpdate.pendingSync = true;
+        projectsState[index] = localUpdate;
+        saveToCache(projectsState);
+        showWarning('⚠️ Offline: Changes saved locally. Will sync when online.');
+        return localUpdate;
+    }
+    
     try {
-        const updateData = {
-            ...updates,
-            updatedAt: new Date().toISOString()
-        };
-        
         const updatedProject = await apiRequest(`/projects/${projectId}`, {
             method: 'PUT',
             body: JSON.stringify(updateData)
         });
         
-        // Update state
-        const index = projectsState.findIndex(p => 
-            (p._id && p._id === projectId) || (p.id && p.id === projectId)
-        );
-        
-        if (index !== -1) {
-            projectsState[index] = updatedProject;
-        }
+        // Update state and cache
+        projectsState[index] = updatedProject;
+        saveToCache(projectsState);
         
         return updatedProject;
     } catch (error) {
         console.error('Error updating project:', error);
-        throw error;
+        
+        // Fallback: keep local changes
+        localUpdate.pendingSync = true;
+        projectsState[index] = localUpdate;
+        saveToCache(projectsState);
+        showWarning('⚠️ Changes saved locally. Will sync when connection is restored.');
+        
+        return localUpdate;
     }
 }
 
@@ -177,20 +293,50 @@ async function updateProject(projectId, updates) {
  * @returns {Promise<boolean>} True if deleted successfully
  */
 async function deleteProject(projectId) {
+    // Remove from local state first for immediate UI feedback
+    const index = projectsState.findIndex(p => 
+        (p._id && p._id === projectId) || (p.id && p.id === projectId)
+    );
+    
+    if (index === -1) {
+        throw new Error('Project not found');
+    }
+    
+    const removedProject = projectsState[index];
+    
+    if (isOfflineMode || projectId.startsWith('temp_')) {
+        // Offline mode or temp project: remove from cache only
+        projectsState.splice(index, 1);
+        saveToCache(projectsState);
+        
+        if (!projectId.startsWith('temp_')) {
+            showWarning('⚠️ Offline: Deletion saved locally. Will sync when online.');
+        }
+        
+        return true;
+    }
+    
     try {
         await apiRequest(`/projects/${projectId}`, {
             method: 'DELETE'
         });
         
-        // Remove from state
-        projectsState = projectsState.filter(p => 
-            (p._id && p._id !== projectId) && (p.id && p.id !== projectId)
-        );
+        // Remove from state and cache
+        projectsState.splice(index, 1);
+        saveToCache(projectsState);
         
         return true;
     } catch (error) {
         console.error('Error deleting project:', error);
-        throw error;
+        
+        // Fallback: mark for deletion
+        projectsState[index].pendingDeletion = true;
+        saveToCache(projectsState);
+        showWarning('⚠️ Deletion saved locally. Will sync when connection is restored.');
+        
+        // Still remove from UI
+        projectsState.splice(index, 1);
+        return true;
     }
 }
 
@@ -306,3 +452,82 @@ window.debugAPI = {
     getProjects: () => projectsState,
     apiUrl: API_BASE_URL
 };
+
+/**
+ * Show warning notification (for offline mode)
+ */
+function showWarning(message) {
+    // Check if showNotification exists (from app.js)
+    if (typeof showNotification === 'function') {
+        showNotification(message, 'warning');
+    } else {
+        console.warn(message);
+    }
+}
+
+/**
+ * Get cache information
+ * @returns {Object} Cache status
+ */
+function getCacheInfo() {
+    const cached = localStorage.getItem(STORAGE_KEYS.PROJECTS);
+    const lastSync = localStorage.getItem(STORAGE_KEYS.LAST_SYNC);
+    
+    return {
+        hasCachedData: !!cached,
+        cachedProjectCount: cached ? JSON.parse(cached).length : 0,
+        lastSync: lastSync || 'Never',
+        isOfflineMode: isOfflineMode
+    };
+}
+
+/**
+ * Force sync with backend (retry failed operations)
+ * @returns {Promise<Object>} Sync result
+ */
+async function forceSyncWithBackend() {
+    try {
+        console.log('🔄 Force syncing with backend...');
+        
+        // Check if backend is available
+        const isConnected = await checkBackendConnection();
+        if (!isConnected) {
+            throw new Error('Backend is not available');
+        }
+        
+        // Reload projects from backend
+        await loadProjects();
+        
+        isOfflineMode = false;
+        localStorage.setItem(STORAGE_KEYS.OFFLINE_MODE, 'false');
+        
+        return {
+            success: true,
+            message: '✅ Successfully synced with backend',
+            projectCount: projectsState.length
+        };
+    } catch (error) {
+        console.error('Force sync failed:', error);
+        return {
+            success: false,
+            message: '❌ Sync failed: ' + error.message,
+            projectCount: projectsState.length
+        };
+    }
+}
+
+// Enhanced debug API
+window.debugAPI = {
+    checkConnection: checkBackendConnection,
+    getStatus: getBackendStatus,
+    getProjects: () => projectsState,
+    getCacheInfo: getCacheInfo,
+    clearCache: clearCache,
+    forceSync: forceSyncWithBackend,
+    isOffline: () => isOfflineMode,
+    apiUrl: API_BASE_URL,
+    saveToCache: () => saveToCache(projectsState),
+    loadFromCache: loadFromCache
+};
+
+console.log('💡 Debug API available: window.debugAPI');

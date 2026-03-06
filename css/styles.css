@@ -955,6 +955,11 @@ footer {
     color: white;
 }
 
+.notification-warning {
+    background: #ff9800;
+    color: white;
+}
+
 /* ===========================
    Accessibility
    =========================== */
