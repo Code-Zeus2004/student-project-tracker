@@ -59,14 +59,12 @@ const ProjectSchema = new mongoose.Schema({
 });
 
 // Update the updatedAt timestamp before saving
-ProjectSchema.pre('save', function(next) {
+ProjectSchema.pre('save', async function() {
     this.updatedAt = Date.now();
-    next();
 });
 
-ProjectSchema.pre('findOneAndUpdate', function(next) {
+ProjectSchema.pre('findOneAndUpdate', async function() {
     this.set({ updatedAt: Date.now() });
-    next();
 });
 
 module.exports = mongoose.model("Project", ProjectSchema);
