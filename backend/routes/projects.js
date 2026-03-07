@@ -19,14 +19,24 @@ router.get("/", async (req, res) => {
 // ADD PROJECT
 router.post("/", async (req, res) => {
     try {
+        console.log('Received project data:', req.body);
+        
         const project = new Project(req.body);
         await project.save();
+        
+        console.log('Project created successfully:', project._id);
         res.status(201).json(project);
     } catch (error) {
         console.error('Error creating project:', error);
+        
+        // Send detailed error for debugging
         res.status(400).json({ 
             message: "Failed to create project", 
-            error: error.message 
+            error: error.message,
+            details: error.errors ? Object.keys(error.errors).map(key => ({
+                field: key,
+                message: error.errors[key].message
+            })) : []
         });
     }
 });
