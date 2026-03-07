@@ -27,10 +27,6 @@ async function initApp() {
         // Load projects from API
         await loadProjects();
         
-        // Initial render
-        renderProjects(getCurrentFilters());
-        updateStats();
-        
         console.log('✅ App initialized successfully');
         
     } catch (error) {
@@ -42,12 +38,13 @@ async function initApp() {
             : 'Failed to load projects. Please refresh the page.';
         
         showError(errorMessage);
-        
-        // Show empty state instead of loading spinner
-        hideLoadingState();
-        renderProjects(getCurrentFilters());
     } finally {
+        // Hide loading state BEFORE rendering
         hideLoadingState();
+        
+        // Now render projects and stats
+        renderProjects(getCurrentFilters());
+        updateStats();
     }
     
     // Set up event listeners
